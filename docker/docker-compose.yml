@@ -1,0 +1,136 @@
+services:
+  # MongoDB Replica Set - 3 nodes for high availability
+
+  mongo1:
+    image: mongo:7.0
+    container_name: mongo1
+    command: mongod --replSet rs0 --bind_ip_all --port 27017
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo1_data:/data/db
+      - mongo1_config:/data/configdb
+    networks:
+      - mongo-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  mongo2:
+    image: mongo:7.0
+    container_name: mongo2
+    command: mongod --replSet rs0 --bind_ip_all --port 27018
+    ports:
+      - "27018:27018"
+    volumes:
+      - mongo2_data:/data/db
+      - mongo2_config:/data/configdb
+    networks:
+      - mongo-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27018/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  mongo3:
+    image: mongo:7.0
+    container_name: mongo3
+    command: mongod --replSet rs0 --bind_ip_all --port 27019
+    ports:
+      - "27019:27019"
+    volumes:
+      - mongo3_data:/data/db
+      - mongo3_config:/data/configdb
+    networks:
+      - mongo-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27019/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Initialize replica set after all nodes are ready
+  mongo-init:
+    image: mongo:7.0
+    container_name: mongo-init
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    networks:
+      - mongo-network
+    entrypoint: >
+      bash -c "
+        echo 'Waiting for MongoDB nodes to be ready...' &&
+        sleep 10 &&
+
+        echo 'Checking if replica set is already initialized...' &&
+        if mongosh --host mongo1:27017 --quiet --eval 'rs.status().ok' 2>/dev/null | grep -q '^1$$'; then
+          echo 'Replica set already initialized, skipping initialization.' &&
+          mongosh --host mongo1:27017 --eval 'rs.status()' &&
+          echo 'Setup complete!';
+        else
+          echo 'Initiating replica set...' &&
+          mongosh --host mongo1:27017 --eval '
+            rs.initiate({
+              _id: \"rs0\",
+              members: [
+                { _id: 0, host: \"mongo1:27017\", priority: 2 },
+                { _id: 1, host: \"mongo2:27018\", priority: 1 },
+                { _id: 2, host: \"mongo3:27019\", priority: 1 }
+              ]
+            })
+          ' &&
+          echo 'Replica set initiated!' &&
+          echo 'Waiting for primary election...' &&
+          sleep 15 &&
+          mongosh --host mongo1:27017 --eval 'rs.status()' &&
+          echo 'Creating sample database and collections...' &&
+          mongosh --host mongo1:27017 --eval '
+            use ecommerce;
+            db.createCollection(\"users\");
+            db.createCollection(\"products\");
+            db.createCollection(\"orders\");
+          ' &&
+          echo 'Setup complete!';
+        fi"
+    restart: "no"
+
+  # MongoDB Express - Web UI for MongoDB
+  mongo-express:
+    image: mongo-express:1.0-20
+    container_name: mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo1:27017,mongo2:27018,mongo3:27019/?replicaSet=rs0
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+    networks:
+      - mongo-network
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+networks:
+  mongo-network:
+    driver: bridge
+
+volumes:
+  mongo1_data:
+  mongo1_config:
+  mongo2_data:
+  mongo2_config:
+  mongo3_data:
+  mongo3_config:
