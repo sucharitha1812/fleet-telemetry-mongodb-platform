@@ -2,11 +2,12 @@
 title: "Fleet Telemetry MongoDB Platform: Document-Oriented IoT Data Modeling and Analytics"
 ---
 ## Fleet Telemetry Architecture Background
-## Alternative Database Architectures for Fleet Telemetry
 
-### Fleet Telemetry Business Scenario
+### Business Scenario
 
 A U.S. logistics company manages thousands of connected trucks that continuously generate GPS, engine, and trip telemetry. The system must support regional, low-latency access to live fleet data while ensuring reliability, fault tolerance, and predictive maintenance analytics.
+
+## Alternative Database Architectures
 
 ### CockroachDB Solution: Relational and Strongly Consistent Design
 
@@ -59,7 +60,7 @@ Each table is denormalized to serve one high-frequency query without joins. Cass
 
 ## Why MongoDB Fits the Fleet Telemetry Use Case
 
-### 1. MongoDB vs Cassandra
+### MongoDB vs Cassandra
 
 **Data Model:**\
 MongoDB stores data in JSON-like BSON documents, where each document can embed related arrays such as a vehicle’s recent telemetry readings or maintenance logs. Cassandra uses a wide-column table structure with static columns and pre-flattened relationships, requiring separate tables for every query pattern.
@@ -73,7 +74,7 @@ MongoDB allows rich ad-hoc queries, secondary indexes, and a powerful aggregatio
 > **Scenario Insight:**\
 > In the IoT Fleet Telemetry system, MongoDB can query vehicles, trips, or telemetry dynamically (e.g., filter all trucks in use1 region with average speed \> 70 mph) without creating new tables—something Cassandra would require a new denormalized table for.
 
-### 2. Key Advantages of MongoDB
+### Key Advantages of MongoDB
 
 -   **Document-First Model (Embedding + Referencing):**\
     Allows nesting related data—such as vehicle info, trip summaries, and a bounded list of recent telemetry events—inside one document for faster lookups.
@@ -84,7 +85,7 @@ MongoDB allows rich ad-hoc queries, secondary indexes, and a powerful aggregatio
 -   **Flexible Schema and Global Sharding:**\
     New IoT metrics (e.g., battery health, fuel pressure) can be added dynamically without migrations. Sharding by region or hashed vehicle_id supports horizontal scale-out across clusters.
 
-### 3. MongoDB Trade-Offs (compared to Relational and Cassandra)?
+### MongoDB Trade-Offs (compared to Relational and Cassandra)?
 
 **Compared to Relational (CockroachDB):**\
 MongoDB relaxes strict relational constraints—there are no enforced foreign keys or multi-table joins. Instead, relationships are handled through embedding or application-level references, improving agility but reducing automatic referential enforcement.
@@ -178,7 +179,7 @@ MongoDB sits between ACID and BASE systems, offering transactional reliability w
   Single `vehicles` document per vehicle with authoritative master fields and embedded `status` block (`region`, `lastSeenTs`, `currentTrip`)  
   → unique index on `vehicleId`
 
-## 2.2 Document Schema Design
+## MongoDB Document Schema Design
 
 ### MongoDB Collection Design and Sample Data |  DB: `fleet`
 
@@ -618,7 +619,7 @@ print("MongoDB collection setup completed successfully.");
 
 ### Data Consistency and Update Strategy
 
-#### 1) Duplicated / Denormalized Data
+#### Duplicated / Denormalized Data
 
 The system uses denormalization to support fast reads and localized updates across multiple access patterns (AP1–AP5). Duplicated fields are small, bounded, and serve as read-optimized copies of authoritative data from master collections.
 
@@ -634,7 +635,7 @@ The system uses denormalization to support fast reads and localized updates acro
 - **Last known route stored as snapshot in:** `maintenance_history_by_vehicle.lastKnownRoute`  
   - These are not backfilled since historical data remains immutable.
 
-#### 2) Update Strategy for Denormalized Data
+#### Update Strategy for Denormalized Data
 
 MongoDB maintains eventual consistency between the master (AP5) and denormalized collections (AP1, AP4). When the master record changes, updates propagate to dependent documents using `$set` operations with `vehicleId` as the join key.
 
@@ -677,7 +678,7 @@ db.fleet_status_by_region.updateOne(
 ```
 Historical collections such as maintenance_history_by_vehicle remain immutable. Snapshots (e.g.,lastKnownRoute) are captured at the time of the event and never altered.
 
-#### 3) Array Growth Management
+#### Array Growth Management
 
 To prevent unbounded document growth, sparkline arrays in AP4 (`trips_by_route_and_day`) are capped at five readings using `$push`, `$slice`, and `$sort`. Older readings are discarded while maintaining chronological order.
 
@@ -699,7 +700,7 @@ db.trips_by_route_and_day.updateOne(
 ```
 In practice, this was validated in the consistency validation script output showing that the sparkline array grew from 2 to 4 elements after update and remained ≤5 even when additional samples were pushed.
 
-#### 4) Evidence Summary
+#### Evidence Summary
 
 The executed consistency validation script (`mongodb_consistency_updates.js`) produced the following verified results:
 
@@ -712,7 +713,7 @@ The executed consistency validation script (`mongodb_consistency_updates.js`) pr
 
 ## Schema Evolution and Migration Strategy
 
-#### 1. Data Transformation
+#### Data Transformation
 
 Migrated the Cassandra tables from the `fleet_management` keyspace into equivalent MongoDB collections that follow the same five access patterns (AP1 – AP5).  
 Each Cassandra row became a MongoDB document, keeping the same logical keys but converting them into compound `_id` objects and JSON structures.
@@ -744,7 +745,7 @@ Each Cassandra row became a MongoDB document, keeping the same logical keys but 
 All data was loaded with idempotent upserts (`updateOne({key}, { $set: doc }, { upsert: true })`) so re-running the ETL is safe.  
 UUIDs (Universally Unique Identifiers) were stored as strings and timestamps converted to UTC(Coordinated Universal Time) `ISODate`.
 
-#### 2. Embedding Strategy
+#### Embedding Strategy
 
 Embedded small, frequently read details and kept large data as separate collections:
 
@@ -762,7 +763,7 @@ Consistency is handled through small propagation updates:
 when a vehicle model changes, update AP5 and fan out the new label to AP1 and AP4.  
 Telemetry snapshots in AP1/AP5 are refreshed after new inserts in AP2.
 
-#### 3. Migration Approach
+#### Migration Approach
 
 **Dual-Write Period:**  
 During migration, the application temporarily wrote to both Cassandra and MongoDB to maintain data consistency.
@@ -803,7 +804,7 @@ The new document model supports embedded snapshots for fast reads, bounded array
 
 ### Final Recommendation and Database Ranking
 
-#### Recommended Option: MongoDB
+#### Recommended Platform: MongoDB
 
 **Because:**  
 MongoDB best satisfies the fleet telemetry and predictive maintenance workload requirements. 
@@ -820,7 +821,7 @@ Replica-set majority writes provide strong per-document consistency, while schem
 Operationally, the Docker Compose replica set proved easier to manage than multi-node Cassandra rings or CockroachDB migrations.  
 Overall, MongoDB offered the best balance of flexibility, consistency, and query power for the fleet telemetry use case.
 
-#### Alternative Option: Cassandra
+#### Alternative Platform: Cassandra
 
 **Because:**  
 The tests showed Cassandra’s exceptional write throughput and high availability under the AP side of CAP.  
@@ -828,14 +829,14 @@ Its query-driven tables (AP1–AP5) handled high-volume sensor ingestion with lo
 However, the fixed schema and lack of cross-table aggregations limited dashboard analytics and schema evolution.  
 Cassandra is ideal for write-intensive stream storage but less suited for mixed OLTP + OLAP workloads that require dynamic document views.
 
-#### Least Suitable Option: CockroachDB
+#### Least Suitable Platform: CockroachDB
 
 **Because:**  
 The relational design offered strong ACID transactions and referential integrity—excellent for OLTP systems—but its normalized schema and JOIN-heavy queries caused higher latency on large telemetry sets.  
 Each schema change required `ALTER TABLE`, reducing agility.  
 While CockroachDB ensures strong consistency, it was not optimized for real-time IoT ingestion and rapidly evolving telemetry structures.
 
-#### Justification
+#### Recommendation Justification
 
 | **Evaluation Factor**            | **Best Fit** | **Supporting Evidence from Implementation Results**                                                                 |
 |----------------------------------|--------------|-----------------------------------------------------------------------------------------------------------|
