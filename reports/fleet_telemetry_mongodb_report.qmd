@@ -1,8 +1,6 @@
 ---
 title: "Fleet Telemetry MongoDB Platform: Document-Oriented IoT Data Modeling and Analytics"
-subtitle: "A Flexible MongoDB Architecture for Fleet Telemetry and Predictive Maintenance"
 ---
-
 ## Fleet Telemetry Architecture Background
 ## Alternative Database Architectures for Fleet Telemetry
 
