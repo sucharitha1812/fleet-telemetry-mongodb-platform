@@ -1,21 +1,18 @@
-# From BASE to Documents - Document-First Design
-## Building on Week 4 & 5 Solutions with MongoDB
-## (IoT Fleet Telemetry & Predictive Maintenance)
-
+---
+title: "Fleet Telemetry MongoDB Platform: Document-Oriented IoT Data Modeling and Analytics"
+subtitle: "A Flexible MongoDB Architecture for Fleet Telemetry and Predictive Maintenance"
 ---
 
-## Part 1: Schema Evolution Review
-## 1.1 Previous Solutions Summary
+## Fleet Telemetry Architecture Background
+## Alternative Database Architectures for Fleet Telemetry
 
-### Business Scenario
+### Fleet Telemetry Business Scenario
 
 A U.S. logistics company manages thousands of connected trucks that continuously generate GPS, engine, and trip telemetry. The system must support regional, low-latency access to live fleet data while ensuring reliability, fault tolerance, and predictive maintenance analytics.
 
-------------------------------------------------------------------------
+### CockroachDB Solution: Relational and Strongly Consistent Design
 
-### Week 4 Solution – CockroachDB (ACID / Path B)
-
-**Solution Type:** Path B – Modern Distributed Database System using CockroachDB.\
+**Solution Type:** CockroachDB was selected as the distributed relational platform for the fleet telemetry workload.\
 CockroachDB was chosen for its PostgreSQL compatibility, automatic range-based sharding, and full ACID guarantees across regions.
 
 **Key Tables:**
@@ -29,9 +26,7 @@ CockroachDB was chosen for its PostgreSQL compatibility, automatic range-based s
 Used `LOCALITY REGIONAL BY ROW AS region` to ensure each record is stored in the physical region that owns it (use1, usc1, usw1).\
 Data is automatically divided into ranges, each replicated 3× via Raft consensus, providing CP behavior (Consistency + Partition Tolerance) with high availability under node failure.
 
-------------------------------------------------------------------------
-
-### Week 5 Cassandra Solution – BASE / AP Design
+### Cassandra Solution: High-Availability Wide-Column Design
 
 **Number of Tables:** Five query-specific tables created in the `fleet_management` keyspace to support major business access patterns.
 
@@ -45,19 +40,17 @@ Data is automatically divided into ranges, each replicated 3× via Raft consensu
 
 **PRIMARY KEY Strategy (Partition keys and clustering columns):**
 
--   Q1 Fleet Status: Partition = `region`; Clustering = `last_seen_ts` DESC → recent vehicles first.
--   Q2 Telemetry by Trip: Partition = `trip_id`; Clustering = `ts` ASC → chronological read.
--   Q3 Maintenance History: Partition = `vehicle_id`; Clustering = `event_date` DESC → latest services first.
--   Q4 Trips by Route and Day: Composite Partition = (`route_id`, `trip_date`); Clustering = `start_ts` ASC.
--   Q5 Vehicle Details: Partition = `vehicle_id` (single-record lookup).
+-   Fleet Status: Partition = `region`; Clustering = `last_seen_ts` DESC → recent vehicles first.
+-   Telemetry by Trip: Partition = `trip_id`; Clustering = `ts` ASC → chronological read.
+-   Maintenance History: Partition = `vehicle_id`; Clustering = `event_date` DESC → latest services first.
+-   Trips by Route and Day: Composite Partition = (`route_id`, `trip_date`); Clustering = `start_ts` ASC.
+-   Vehicle Details: Partition = `vehicle_id` (single-record lookup).
 
 Each table is denormalized to serve one high-frequency query without joins. Cassandra’s peer-to-peer ring replicates partitions evenly, delivering Availability + Partition Tolerance (AP) and tunable consistency levels.
 
-------------------------------------------------------------------------
+## Comparison of Relational, Wide-Column, and Document Models
 
-## 1.2 Design Philosophy Comparison
-
-| **Aspect**             | **Week 4 (Relational – CockroachDB)**                                                   | **Week 5 (Cassandra)**                                                       | **Insight / Analysis**                                                                                                                                          |
+| **Aspect**             | **CockroachDB Relational Architecture**                                                   | **Cassandra Wide-Column Architecture**                                                       | **Insight / Analysis**                                                                                                                                          |
 |------------------------|------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Design Driver**      | Normalization – modeled logical entities and enforced foreign keys for integrity.        | Query Patterns – tables built for specific reads (region dashboard, trip history, etc.). | The relational model emphasized correctness and referential integrity, while Cassandra redesigned data around business queries to minimize joins and latency. |
 | **Data Duplication**   | Minimal – vehicle, trip, and telemetry data stored once and joined when needed.          | Accepted for performance – attributes like model or region repeated across tables.       | Duplication intentionally increases write cost but eliminates cross-table joins, a key trade-off for IoT telemetry throughput.                                 |
@@ -66,12 +59,9 @@ Each table is denormalized to serve one high-frequency query without joins. Cass
 | **Consistency Model**  | Strong ACID (Serializable transactions via Raft consensus).                              | Eventual BASE (Tunable Consistency Levels per operation).                                 | CockroachDB sacrifices latency for guaranteed accuracy; Cassandra prioritizes uptime and low-latency ingestion of streaming sensor data.                      |
 | **Performance Orientation** | Balanced through transactions and indexes.                                          | Write-optimized / linear scaling via partition keys.                                      | For continuous telemetry ingestion, Cassandra’s write-path scalability outweighs the need for multi-table transactions.                                        |
 
+## Why MongoDB Fits the Fleet Telemetry Use Case
 
-------------------------------------------------------------------------
-
-## 1.3 MongoDB Positioning
-
-### 1. How is MongoDB different from Cassandra?
+### 1. MongoDB vs Cassandra
 
 **Data Model:**\
 MongoDB stores data in JSON-like BSON documents, where each document can embed related arrays such as a vehicle’s recent telemetry readings or maintenance logs. Cassandra uses a wide-column table structure with static columns and pre-flattened relationships, requiring separate tables for every query pattern.
@@ -85,9 +75,7 @@ MongoDB allows rich ad-hoc queries, secondary indexes, and a powerful aggregatio
 > **Scenario Insight:**\
 > In the IoT Fleet Telemetry system, MongoDB can query vehicles, trips, or telemetry dynamically (e.g., filter all trucks in use1 region with average speed \> 70 mph) without creating new tables—something Cassandra would require a new denormalized table for.
 
-------------------------------------------------------------------------
-
-### 2. What are MongoDB’s key advantages?
+### 2. Key Advantages of MongoDB
 
 -   **Document-First Model (Embedding + Referencing):**\
     Allows nesting related data—such as vehicle info, trip summaries, and a bounded list of recent telemetry events—inside one document for faster lookups.
@@ -98,9 +86,7 @@ MongoDB allows rich ad-hoc queries, secondary indexes, and a powerful aggregatio
 -   **Flexible Schema and Global Sharding:**\
     New IoT metrics (e.g., battery health, fuel pressure) can be added dynamically without migrations. Sharding by region or hashed vehicle_id supports horizontal scale-out across clusters.
 
-------------------------------------------------------------------------
-
-### 3. What trade-offs does MongoDB make (compared to Relational and Cassandra)?
+### 3. MongoDB Trade-Offs (compared to Relational and Cassandra)?
 
 **Compared to Relational (CockroachDB):**\
 MongoDB relaxes strict relational constraints—there are no enforced foreign keys or multi-table joins. Instead, relationships are handled through embedding or application-level references, improving agility but reducing automatic referential enforcement.
@@ -112,11 +98,11 @@ MongoDB trades some of Cassandra’s extreme write-throughput for stronger consi
 MongoDB sits between ACID and BASE systems, offering transactional reliability where needed (e.g., updating trip status + telemetry snapshot together) while still scaling horizontally for high-volume IoT data. This makes it a hybrid fit for mixed operational-analytic workloads.
 
 
-## Part 2: MongoDB Document-First Redesign
+## MongoDB Document-Oriented Design
 
-## 2.1 Access Pattern Analysis
+## Access Pattern Analysis
 
-#### AP1: Regional Fleet Dashboard (Week05 Q1 → `fleet_status_by_region`)
+#### AP1: Regional Fleet Dashboard Use Case
 
 - **Data Accessed Together:**  
   Region, list of vehicles, each vehicle’s `last_seen_ts`, latest telemetry snapshot (`speed`, `engine temp`, `fuel level`), and basic model/org.
@@ -131,9 +117,7 @@ MongoDB sits between ACID and BASE systems, offering transactional reliability w
   One document per vehicle in `vehicles`; embed `latestTelemetry` and `lastSeenTs`; query by `{ region }` and sort by `lastSeenTs`  
   → index: `{ region: 1, lastSeenTs: -1 }`
 
----
-
-#### AP2: Telemetry Readings by Trip (Week05 Q2 → `telemetry_by_trip`)
+#### AP2: Telemetry Readings by Trip Use Case
 
 - **Data Accessed Together:**  
   Trip header (`vehicleId`, `routeId`, `start/end`) + time-ordered telemetry points (`ts`, `speed`, `temp`, `pressure`) for that trip
@@ -149,9 +133,7 @@ MongoDB sits between ACID and BASE systems, offering transactional reliability w
   full stream in `telemetry` collection referenced by `tripId`  
   → index: `{ tripId: 1, ts: 1 }`
 
----
-
-#### AP3: Maintenance History by Vehicle (Week05 Q3 → `maintenance_history_by_vehicle`)
+#### AP3: Maintenance History by Vehicle Use Case
 
 - **Data Accessed Together:**  
   Vehicle profile and its maintenance events (`eventDate`, `workType`, `notes`, `lastKnownRouteId`), most recent first
@@ -167,9 +149,7 @@ MongoDB sits between ACID and BASE systems, offering transactional reliability w
   full records live in `maintenance` collection referenced by `vehicleId`  
   → index: `{ vehicleId: 1, eventDate: -1 }`
 
----
-
-#### AP4: Trips by Route and Day (Week05 Q4 → `trips_by_route_and_day`)
+#### AP4: Trips by Route and Day
 
 - **Data Accessed Together:**  
   For a given (`routeId`, `tripDate`), list of trips with `startTs`, `tripId`, and small vehicle summary (`vehicleId`, `vehicleModel`) for the planner view
@@ -185,9 +165,7 @@ MongoDB sits between ACID and BASE systems, offering transactional reliability w
   store just a snapshot of vehicle info; reference full vehicle doc as needed  
   → index: `{ routeId: 1, tripDate: 1, startTs: 1 }`
 
----
-
-#### AP5: Vehicle Details Lookup (Week05 Q5 → `vehicle_details`)
+#### AP5: Vehicle Details Lookup
 
 - **Data Accessed Together:**  
   Vehicle master record (`orgId`, `model`, `homeRegion`, `manufactureYear`) plus current status (`region`, `lastSeenTs`, `currentTrip`)
@@ -204,7 +182,7 @@ MongoDB sits between ACID and BASE systems, offering transactional reliability w
 
 ## 2.2 Document Schema Design
 
-### Part 2.2 — Executable Design (ALL 5 PATTERNS)  |  DB: `fleet`
+### MongoDB Collection Design and Sample Data |  DB: `fleet`
 
 - Creates collections  
 - Creates indexes (index strategy)  
@@ -224,7 +202,7 @@ function ensureCollection(name) {
 }
 ```
 
-### AP1: Regional Fleet Dashboard View (Week05 Q1)
+### AP1: Regional Fleet Dashboard View
 - **Collection Name:**
 fleet_status_by_region
 - **Purpose:**  
@@ -310,7 +288,7 @@ db.fleet_status_by_region.createIndex({ region: 1, "vehicle.model": 1 }, { name:
 - Duplicate small labels (`model`, `orgId`) to avoid joins on hot dashboard reads
 
 
-### AP2: Telemetry by Trip View (Week05 Q2)
+### AP2: Telemetry by Trip View
 
 - **Collection Name:** `telemetry_by_trip`  
 - **Purpose:** Ordered time-series readings per trip for analytics
@@ -364,7 +342,7 @@ db.telemetry_by_trip.createIndex({ "vehicle.vehicleId": 1, ts: -1 }, { name: "ve
 **Denormalization (where appropriate)**
 - Keep minimal `vehicleId` in each reading → enables fast filters without joins
 
-### AP3: Vehicle Maintenance History View (Week05 Q3)
+### AP3: Vehicle Maintenance History View
 
 - **Collection Name:** `maintenance_history_by_vehicle`  
 - **Purpose:** Chronological list of service events for each truck
@@ -440,7 +418,7 @@ db.maintenance_history_by_vehicle.createIndex(
 **Denormalization (where appropriate)**
 - Duplicate `routeId` in the event to avoid joins during history review
 
-### AP4: Trips by Route and Day (Week05 Q4)
+### AP4: Trips by Route and Day Use Case
 
 - **Collection Name:** `trips_by_route_and_day`  
 - **Purpose:** Retrieve trips for a route on a specific day, ordered by `startTs`
@@ -548,7 +526,7 @@ db.trips_by_route_and_day.createIndex({ "vehicle.vehicleId": 1, startTs: -1 }, {
 - Precompute small aggregates (`telemetrySummary`)
 - Duplicate vehicle label → fast list rendering without joins
 
-### AP5: Vehicle Details Lookup (Master) (Week05 Q5)
+### AP5: Vehicle Details Lookup Use Case (Master)
 
 - **Collection Name:** `vehicle_details`  
 - **Purpose:** Authoritative single-vehicle master record (fast lookup)
@@ -556,7 +534,7 @@ db.trips_by_route_and_day.createIndex({ "vehicle.vehicleId": 1, startTs: -1 }, {
 **Document Schema and Insert Samples:**
 
 ```js
-// AP5: Vehicle Details Lookup (Master)  (Week05 Q5)
+// AP5: Vehicle Details Lookup (Master)  
 // Collection: vehicle_details
 // Purpose: Authoritative single-vehicle master record (fast lookup)
 ensureCollection("vehicle_details");
@@ -634,13 +612,13 @@ db.vehicle_details.createIndex({ orgId: 1, homeRegion: 1 }, { name: "org_region"
 - Include `specs` and `registration` → common UI views avoid additional lookups
 
 ```js
-print("Part 2.2 EXEC: Collections, indexes, and sample docs are in place.");
+print("MongoDB collection setup completed successfully.");
 ```
-**Execution Proof: Collections Created**
-![Collections created for AP1–AP5 per assignment spec.](../images/CollectionsCreation.jpg){#fig-collections-created fig-align="center" width="100%"}
-*All collections (AP1–AP5) created successfully according to assignment specifications.*
+**Collection Creation Results**
+![Collections created for AP1–AP5 per intended design spec.](../images/CollectionsCreation.jpg){#fig-collections-created fig-align="center" width="100%"}
+*All collections (AP1–AP5) were created successfully and validated against the intended workload requirements.*
 
-### Part 2.3 – Data Consistency and Update Strategy
+### Data Consistency and Update Strategy
 
 #### 1) Duplicated / Denormalized Data
 
@@ -721,11 +699,11 @@ db.trips_by_route_and_day.updateOne(
   }
 );
 ```
-In practice, this was validated in the proof script output showing that the sparkline array grew from 2 to 4 elements after update and remained ≤5 even when additional samples were pushed.
+In practice, this was validated in the consistency validation script output showing that the sparkline array grew from 2 to 4 elements after update and remained ≤5 even when additional samples were pushed.
 
 #### 4) Evidence Summary
 
-The executed proof script (`mongodb_consistency_updates.js`) produced the following verified results:
+The executed consistency validation script (`mongodb_consistency_updates.js`) produced the following verified results:
 
 - AP1 and AP4 contain duplicated vehicle data (aligned with AP5 master).
 - Model update (`VolvoX → VolvoX-Pro`) propagated from AP5 → AP1.
@@ -734,29 +712,26 @@ The executed proof script (`mongodb_consistency_updates.js`) produced the follow
 - Historical collections remained immutable.
 
 
-
-
-
-## 2.4 Schema Evolution Plan
+## Schema Evolution and Migration Strategy
 
 #### 1. Data Transformation
 
-We migrated the Week 5 Cassandra tables from the `fleet_management` keyspace into equivalent MongoDB collections that follow the same five access patterns (AP1 – AP5).  
+Migrated the Cassandra tables from the `fleet_management` keyspace into equivalent MongoDB collections that follow the same five access patterns (AP1 – AP5).  
 Each Cassandra row became a MongoDB document, keeping the same logical keys but converting them into compound `_id` objects and JSON structures.
 
 - **`fleet_status_by_region` → `fleet_status_by_region` (AP1):**  
   Each Cassandra row (`region`, `vehicle_id`, `last_seen_ts`) became one document.  
-  We embedded `model` and `org_id` as `vehicle.{model,orgId}` and moved `latest_speed` and `latest_temp` into `latestTelemetry.{speed,temp}`.  
+  Embedded `model` and `org_id` as `vehicle.{model,orgId}` and moved `latest_speed` and `latest_temp` into `latestTelemetry.{speed,temp}`.  
   The region dashboard is now queried efficiently with an index on `{ region: 1, lastSeenTs: -1 }`.
 
 - **`telemetry_by_trip` → `telemetry_by_trip` (AP2):**  
   Each telemetry reading became a single document with `_id: { tripId, ts }`.  
-  We grouped numeric fields under `metrics{speed, temp, pressure}` and embedded the `vehicle.vehicleId` reference.  
+  Grouped numeric fields under `metrics{speed, temp, pressure}` and embedded the `vehicle.vehicleId` reference.  
   This mirrors the Cassandra partition (`trip_id`) and clustering (`ts`) logic.
 
 - **`maintenance_history_by_vehicle` → `maintenance_history_by_vehicle` (AP3):**  
   Every maintenance event row was converted to a document with `_id: { vehicleId, eventDate, maintId }`.  
-  We kept all fields and embedded `last_known_route_id` as `lastKnownRoute.routeId`.  
+  Kept all fields and embedded `last_known_route_id` as `lastKnownRoute.routeId`.  
   This collection remains append-only to preserve history.
 
 - **`trips_by_route_and_day` → `trips_by_route_and_day` (AP4):**  
@@ -766,16 +741,14 @@ Each Cassandra row became a MongoDB document, keeping the same logical keys but 
 
 - **`vehicle_details` → `vehicle_details` (AP5):**  
   Each master row (`vehicle_id`, `org_id`, `model`, `home_region`, `manufacture_year`) was stored as a single document using `vehicleId` as the `_id`.  
-  We added an optional `latestTelemetry` subdocument for quick lookups.
+  Added an optional `latestTelemetry` subdocument for quick lookups.
 
 All data was loaded with idempotent upserts (`updateOne({key}, { $set: doc }, { upsert: true })`) so re-running the ETL is safe.  
 UUIDs (Universally Unique Identifiers) were stored as strings and timestamps converted to UTC(Coordinated Universal Time) `ISODate`.
 
----
-
 #### 2. Embedding Strategy
 
-We embedded small, frequently read details and kept large data as separate collections:
+Embedded small, frequently read details and kept large data as separate collections:
 
 **Embedded:**
 - AP1 → `vehicle{model, orgId}` and `latestTelemetry{speed, temp, fuelLevel}`
@@ -786,12 +759,10 @@ We embedded small, frequently read details and kept large data as separate colle
 - AP2 telemetry stream (one document per reading)
 - AP5 vehicle master (source of truth)
 
-This structure preserved our Cassandra denormalization while improving read performance for the same queries.  
+This structure preserved the Cassandra denormalization while improving read performance for the same queries.  
 Consistency is handled through small propagation updates:  
-when a vehicle model changes, we update AP5 and fan out the new label to AP1 and AP4.  
+when a vehicle model changes, update AP5 and fan out the new label to AP1 and AP4.  
 Telemetry snapshots in AP1/AP5 are refreshed after new inserts in AP2.
-
----
 
 #### 3. Migration Approach
 
@@ -799,48 +770,46 @@ Telemetry snapshots in AP1/AP5 are refreshed after new inserts in AP2.
 During migration, the application temporarily wrote to both Cassandra and MongoDB to maintain data consistency.
 
 **Backfill Phase:**  
-We exported Cassandra tables (`COPY TO CSV`) and transformed each row to the Mongo document format using Python/Node scripts.  
-Collections and indexes were pre-created using our Part 2.2 scripts before loading.
+Exported Cassandra tables (`COPY TO CSV`) and transformed each row to the Mongo document format using Python/Node scripts.  
+Collections and indexes were pre-created using the Part 2.2 scripts before loading.
 
 **Validation:**  
 Record counts and sample hashes were compared between Cassandra and MongoDB.  
 Query plans were checked with `explain()` to confirm index usage.  
-Consistency was verified using the Part 2.3 proof script (model and telemetry updates matched).
+Consistency was verified using the consistency validation script (model and telemetry updates matched).
 
 **Cutover and Fallback:**  
 Once validated, reads were switched to MongoDB and Cassandra was kept read-only for a short observation period.  
 Because all loads used upserts, any failed batches could be safely re-run without duplicates.
 
----
-
 #### Summary
 
-We successfully migrated our Week 5 Cassandra schema to MongoDB while keeping the same access patterns and query behavior.  
+Redesigned the earlier Cassandra-based fleet telemetry architecture using MongoDB while keeping the same access patterns and query behavior.  
 The new document model supports embedded snapshots for fast reads, bounded arrays for growth control, and a clear eventual consistency strategy.
 
-## Part 3: Comparative Analysis
+## Comparative Database Analysis
 
-### 3.1 Three-Way Design Comparison
+### Three-Way Database Design Comparison
 
-| **Aspect**            | **Week 4 (Relational – CockroachDB)**                                         | **Week 5 (Cassandra)**                                                             | **Week 7 (MongoDB)**                                                                 | **Best for Fleet Telemetry Use Case (AP1–AP5)** |
+| **Aspect**            | **CockroachDB Relational Architecture**                                         | **Cassandra Wide-Column Architecture**                                                             | **MongoDB Document Architecture**                                                                 | **Best for Fleet Telemetry Use Case (AP1–AP5)** |
 |-----------------------|------------------------------------------------------------------------------|------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------|
 | **Schema Design**     | Fully normalized tables with strong data types and foreign keys.             | Query-driven wide tables; each table built for a specific query pattern.          | Document-driven collections mapped one-to-one to AP1–AP5 views.                      | **MongoDB** – Collections mirror each access pattern directly and allow rapid schema evolution without joins. |
 | **Data Relationships**| Relationships enforced with foreign keys and JOIN queries.                   | All relationships flattened and duplicated inside each table (denormalized).       | Uses a mix of embedded sub-documents (small labels, snapshots) and references (for streams and masters). | **MongoDB** – Hybrid model keeps reads fast (AP1, AP4) while avoiding excess duplication for large streams (AP2). |
-| **Schema Flexibility**| ALTER TABLE and migrations required for any change.                          | Fixed per table; schema must be re-created for new fields.                         | Dynamic and schema-optional; new fields added without downtime or migration.         | **MongoDB** – We added fields like sparkline and snapshot without schema changes. |
+| **Schema Flexibility**| ALTER TABLE and migrations required for any change.                          | Fixed per table; schema must be re-created for new fields.                         | Dynamic and schema-optional; new fields added without downtime or migration.         | **MongoDB** – Added fields like sparkline and snapshot without schema changes. |
 | **Query Complexity**  | Requires multi-table JOINs and aggregation functions.                        | Single-table lookups and range queries (per partition key).                        | Rich aggregation pipeline with match, group, and sort stages and compound indexes.   | **MongoDB** – Supports dashboards (AP1), time-series windows (AP2), and route/day analytics (AP4) in one pipeline. |
-| **Data Consistency**  | Strong ACID transactions across rows and tables.                             | Tunable consistency (model per write or read); eventual across nodes.              | Strong within a document (majority-write replica set); eventual across collections. | **MongoDB** – Per-document atomic writes cover our denormalized snapshots while supporting eventual updates. |
-| **Write Performance** | Moderate (write checks and indexes).                                         | Excellent for append-only workloads (high ingest rate).                            | Good for in-place updates and bulk inserts; balanced read/write.                     | **MongoDB** – Best balance for our mixed workload (telemetry ingest + dashboard updates). |
-| **Read Performance**  | Depends on JOINs and index coverage.                                         | Excellent – pre-shaped rows per query pattern.                                     | Excellent – embedded labels and compound indexes (no JOINs).                         | **MongoDB** – Our Part 2.2 proofs show IXSCAN on all queries (AP1–AP5). |
+| **Data Consistency**  | Strong ACID transactions across rows and tables.                             | Tunable consistency (model per write or read); eventual across nodes.              | Strong within a document (majority-write replica set); eventual across collections. | **MongoDB** – Per-document atomic writes cover the denormalized snapshots while supporting eventual updates. |
+| **Write Performance** | Moderate (write checks and indexes).                                         | Excellent for append-only workloads (high ingest rate).                            | Good for in-place updates and bulk inserts; balanced read/write.                     | **MongoDB** – Best balance for the mixed workload (telemetry ingest + dashboard updates). |
+| **Read Performance**  | Depends on JOINs and index coverage.                                         | Excellent – pre-shaped rows per query pattern.                                     | Excellent – embedded labels and compound indexes (no JOINs).                         | **MongoDB** – Query explain plans showed IXSCAN usage across all major access patterns (AP1–AP5). |
 | **Storage Efficiency**| Very high – minimal duplication but higher I/O cost.                         | Low – significant duplication for denormalized tables.                             | Medium – selective denormalization with bounded arrays (e.g., `lastFiveReadings`).   | **MongoDB** – Selective duplication reduces JOINs while keeping storage reasonable. |
 
 
-### 3.2 Final Recommendation
+### Final Recommendation and Database Ranking
 
-#### 1st Choice – MongoDB
+#### Recommended Option: MongoDB
 
 **Because:**  
-MongoDB best satisfies our Fleet Telemetry and Maintenance requirements.  
-Its document-driven model maps directly to our five access patterns (AP1 – AP5):
+MongoDB best satisfies the fleet telemetry and predictive maintenance workload requirements. 
+Its document-driven model maps directly to the five access patterns (AP1 – AP5):
 
 - **AP1 – Regional Dashboard:** `fleet_status_by_region` with embedded vehicle labels + telemetry snapshots.  
 - **AP2 – Telemetry by Trip:** `telemetry_by_trip` using compound IDs and time-ordered metrics.  
@@ -848,61 +817,50 @@ Its document-driven model maps directly to our five access patterns (AP1 – AP5
 - **AP4 – Trips by Route and Day:** bounded arrays (`lastFiveReadings`) + derived summaries.  
 - **AP5 – Vehicle Master:** single document per vehicle with latest snapshot.
 
-MongoDB’s aggregation pipeline replaced Week 04’s complex JOINs and delivered both OLTP and OLAP-style queries in one framework.  
+MongoDB’s aggregation pipeline replaced complex JOINs and delivered both OLTP and OLAP-style queries in one framework.  
 Replica-set majority writes provide strong per-document consistency, while schema-less documents enabled rapid evolution (e.g., adding `sparkline` or `telemetrySummary` fields without migration).  
-Operationally, the Week 07 Docker Compose replica set proved easier to manage than multi-node Cassandra rings or CockroachDB migrations.  
-Overall, MongoDB offered the best balance of flexibility, consistency, and query power for our fleet telemetry use case.
+Operationally, the Docker Compose replica set proved easier to manage than multi-node Cassandra rings or CockroachDB migrations.  
+Overall, MongoDB offered the best balance of flexibility, consistency, and query power for the fleet telemetry use case.
 
----
-
-#### 2nd Choice – Cassandra (Week 5)
+#### Alternative Option: Cassandra
 
 **Because:**  
-Week 05 tests showed Cassandra’s exceptional write throughput and high availability under the AP side of CAP.  
+The tests showed Cassandra’s exceptional write throughput and high availability under the AP side of CAP.  
 Its query-driven tables (AP1–AP5) handled high-volume sensor ingestion with low latency.  
 However, the fixed schema and lack of cross-table aggregations limited dashboard analytics and schema evolution.  
 Cassandra is ideal for write-intensive stream storage but less suited for mixed OLTP + OLAP workloads that require dynamic document views.
 
----
-
-#### 3rd Choice – CockroachDB (Week 4)
+#### Least Suitable Option: CockroachDB
 
 **Because:**  
-Our Week 04 relational design offered strong ACID transactions and referential integrity—excellent for OLTP systems—but its normalized schema and JOIN-heavy queries caused higher latency on large telemetry sets.  
+The relational design offered strong ACID transactions and referential integrity—excellent for OLTP systems—but its normalized schema and JOIN-heavy queries caused higher latency on large telemetry sets.  
 Each schema change required `ALTER TABLE`, reducing agility.  
-While CockroachDB ensures strong consistency, it was not optimized for the real-time IoT ingest and fast-evolving data structures our project demands.
+While CockroachDB ensures strong consistency, it was not optimized for real-time IoT ingestion and rapidly evolving telemetry structures.
 
----
+#### Justification
 
-#### Justification (Week 04 → Week 07 Evidence)
-
-| **Evaluation Factor**            | **Best Fit** | **Supporting Evidence from Assignments**                                                                 |
+| **Evaluation Factor**            | **Best Fit** | **Supporting Evidence from Implementation Results**                                                                 |
 |----------------------------------|--------------|-----------------------------------------------------------------------------------------------------------|
-| Primary Access Patterns (OLTP vs OLAP) | MongoDB     | Week 07 aggregation pipelines served real-time dashboards + summaries without JOINs.                     |
-| Consistency Requirements         | CockroachDB > MongoDB | Week 04 verified serializable ACID; Week 07 provided strong per-document consistency sufficient for telemetry. |
-| Scale Requirements (Data Volume / Query Volume) | Cassandra   | Week 05 wide-table design handled billions of writes with low latency across regions.                    |
-| Schema Evolution Needs           | MongoDB     | Week 07 collections accepted new fields (`sparkline`, `snapshot`) without migrations or downtime.        |
+| Primary Access Patterns (OLTP vs OLAP) | MongoDB     | MongoDB aggregation pipelines supported real-time dashboards and summary analytics without JOINs.                     |
+| Consistency Requirements         | CockroachDB > MongoDB | CockroachDB provided serializable ACID guarantees, while MongoDB delivered strong per-document consistency for telemetry workloads. |
+| Scale Requirements (Data Volume / Query Volume) | Cassandra   | The Cassandra wide-table design handled very high write volumes with low latency across regions.                    |
+| Schema Evolution Needs           | MongoDB     | MongoDB collections accepted new fields such as sparkline and snapshot without migrations or downtime.        |
 | Team Expertise                   | MongoDB     | JSON structure and Compass tools simplified development vs. CQL and DDL scripts.                         |
 | Operational Complexity           | MongoDB     | Docker replica set deployment simpler than Cassandra’s ring setup or CockroachDB cluster migrations.     |
 
----
+#### Overall Recommendation
 
-#### Final Verdict
-
-Based on our Week 04 (ACID Relational), Week 05 (AP Wide-Column), and Week 07 (Document NoSQL) implementations:
+Based on the CockroachDB, Cassandra, and MongoDB implementations:
 
 - **MongoDB** – Best overall solution for balanced consistency, flexibility, and real-time analytics.  
 - **Cassandra** – Best for high-velocity write streams and availability.  
 - **CockroachDB** – Best for strict transactional OLTP scenarios but not for rapidly evolving IoT data.
 
-MongoDB achieves the ideal middle ground for our Fleet Telemetry project—supporting mixed OLTP/OLAP queries, dynamic schemas, and manageable operations while preserving the data relationships and access patterns we defined throughout Parts 1 and 2.
-
-
-## Appendix: 
+MongoDB achieves the ideal balance for the fleet telemetry platform by supporting mixed OLTP/OLAP queries, dynamic schemas, and manageable operations while preserving key data relationships and access patterns. 
 
 ## Appendix
 
-### Cluster Setup and connectivity:
+### Replica Set Setup and Connectivity:
 
 ![Docker Compose: Mongo replica set is up and all containers are healthy.](../images/ClusterUPandContainersHealthy.jpg){#fig-cluster-healthy fig-align="center" width="100%"}
 *MongoDB containers and replica set initialized successfully via Docker Compose, confirming cluster health.*
@@ -910,9 +868,9 @@ MongoDB achieves the ideal middle ground for our Fleet Telemetry project—suppo
 ![Replica set status and client connectivity verified.](../images/StatusandConnectivity.jpg){#fig-status-connectivity fig-align="center" width="100%"}
 *Replica set members connected and verified using Mongo shell, confirming client connectivity.*
 
-### Part 2.2 – Proof Runner Script:
+### MongoDB Validation Script:
 
-The following script was used to validate:
+The following validation script was executed to verify:
 - Existence of all collections and indexes
 - Query results for each access pattern (AP1–AP5)
 - Execution of MQL queries and explain plans
@@ -920,8 +878,8 @@ The following script was used to validate:
 
 ```js
 /**********************************************************************
- Part 2.2 — Proof Runner (prints all evidence in one go)
- Assumes you've already run: mongodb_schema_setup.js
+ MongoDB Validation Script (prints all validation evidence in one run)
+Prerequisite: Run mongodb_schema_setup.js before executing this validation script.
 **********************************************************************/
 
 (function () {
@@ -1057,7 +1015,7 @@ print("-------------------------------------------------------------------------
    ![AP1: Aggregation computing average speed by region.](../images/AP1AggregationAvgSpeed.jpg){#fig-ap1-avg-speed fig-align="center" width="100%"}
    *Aggregation pipeline computing average vehicle speed per region in AP1 collection.*
 
-### Part 2.3 Proof Script:
+### Consistency Validation Script:
 
 The following script (`mongodb_consistency_updates.js`) was executed in MongoDB Shell (`mongosh`) to verify consistency, updates, and bounded array behavior across AP1–AP5 collections.
 
@@ -1068,7 +1026,7 @@ It validates:
 
 ```js
 /**********************************************************************
- Part 2.3 — Data Consistency & Update Strategy  |  DB: fleet
+ Consistency Validation and Update Strategy | DB: `fleet`
  ----------------------------------------------------------------------
  Demonstrates:
    1.  Propagation of duplicated labels  (AP5 → AP1 → AP4)
@@ -1119,10 +1077,10 @@ show("AP1 latestTelemetry snapshot (VH-2002)",
 ```
 
 ![Before deduplication: duplicate documents identified (set 1).](../images/DuplicatesBeforeUpdate1.jpg){#fig-dupes-1 fig-align="center" width="100%"}
-*Detected duplicate records prior to cleanup (Set 1) in AP collections.*
+*Initial duplicate label values identified before consistency updates.*
 
 ![Before deduplication: duplicate documents identified (set 2).](../images/DuplicatesBeforeUpdate2.jpg){#fig-dupes-2 fig-align="center" width="100%"}
-*Detected duplicate records prior to cleanup (Set 2) confirming replication artifacts.*
+*Initial telemetry snapshot differences identified before synchronization.*
 ```js
 /* ---------------------------------------------------------------
    1) Propagate model update (VH-1001 → VolvoX-Pro)
@@ -1264,28 +1222,7 @@ show("AFTER: AP4 sparkline (kept newest 5, TR-2010)",
        { _id: 0, tripId: 1, lastFiveReadings: 1 }));
 
 // Final confirmation:
-print("\n=== Part 2.3 proof script completed successfully ===");
+print("\n=== MongoDB validation completed successfully ===");
 ```
 ![After: dashboard table with sparkline per vehicle.](../images/AfterSparkline.jpg){#fig-after-sparkline fig-align="center" width="100%"}
 *Fleet status visualization after sparkline integration showing capped trend arrays.*
-
-## Team Collaboration
-
-**Team Name:** Data Pioneers
-
-**Members:**
-- Sucharitha Reddy Gaddam (U21714808)
-- Geetha Sathyasri Reddi (U28303668)
-- Meghana Kandagatla (U41694366)
-
-### Collaboration Summary
-
-We, the **Data Pioneers** team, worked collaboratively on all phases of the MongoDB Document-First redesign and validation assignment. Each member took ownership of key components to ensure balanced contributions across schema design, implementation, execution, and documentation.
-
-- **Sucharitha Reddy Gaddam** led the practical execution and validation of all MongoDB scripts (`mongodb_schema_setup.js`, `mongodb_query_proofs.js`, and `mongodb_consistency_updates.js`) using VS Code and Dockerized MongoDB. Ensured successful data consistency tests, aggregation results, and proof outputs. Also contributed to the comparative analysis (Part 3) and integrated final results into the report.
-
-- **Geetha Sathyasri Reddi** was responsible for the schema design and coding (Part 2). Defined the collections, indexes, and embedding/referencing logic for all five access patterns (AP1–AP5) and prepared detailed design rationales for each. Also assisted in aligning the document-first structure with MongoDB best practices and the rubric requirements.
-
-- **Meghana Kandagatla** contributed to query design, proof validation, and documentation. Reviewed and tested the sample queries, verified aggregation and MQL outputs, and formatted the final document for clarity and coherence. Also supported the summary and comparison portions of Parts 1 and 3.
-
-All team members jointly reviewed the schema evolution, consistency validation, and aggregation outputs to confirm alignment with the rubric. The final submission represents a unified effort, where each member contributed equally to achieving full functional and documentation completeness.
