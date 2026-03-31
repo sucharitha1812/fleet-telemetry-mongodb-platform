@@ -1,10 +1,11 @@
 /**********************************************************************
- Part 2.3 — Data Consistency & Update Strategy  |  DB: fleet
- ----------------------------------------------------------------------
+ Fleet Telemetry Platform — Consistency and Update Propagation
+ Database: fleet
+
  Demonstrates:
-   1.  Propagation of duplicated labels  (AP5 → AP1 → AP4)
-   2.  Synchronization of telemetry snapshots (AP2 → AP5 → AP1)
-   3.  Bounded array updates  (keep ≤ 5 sparkline readings)
+   1. Propagation of duplicated vehicle labels
+   2. Synchronization of telemetry snapshots
+   3. Bounded array updates for sparkline history
 **********************************************************************/
 
 db = db.getSiblingDB("fleet");
@@ -171,6 +172,6 @@ show("AFTER: AP4 sparkline (kept newest 5, TR-2010)",
        { tripId: "TR-2010" },
        { _id: 0, tripId: 1, lastFiveReadings: 1 }));
 
-print("\n=== Part 2.3 proof script completed successfully ===");
+print("\n=== Consistency and update propagation script completed successfully ===");
 
 

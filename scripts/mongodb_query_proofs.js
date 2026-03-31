@@ -1,6 +1,8 @@
 /**********************************************************************
- Part 2.2 — Proof Runner (prints all evidence in one go)
- Assumes you've already run: part2_2_design_exec.js
+Fleet Telemetry Platform — Query Validation and Index Proofs
+
+ Assumes the MongoDB collections, indexes, and sample documents
+ have already been created before running this script.
 **********************************************************************/
 
 (function () {

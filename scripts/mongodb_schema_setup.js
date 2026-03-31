@@ -1,9 +1,11 @@
 /**********************************************************************
- Part 2.2 — Executable Design (ALL 5 PATTERNS)  |  DB: fleet
+ Fleet Telemetry Platform — MongoDB Schema Setup
+ Database: fleet
+
  - Creates collections
- - Creates indexes (index strategy)
- - Inserts one sample document per access pattern to verify structure
- - Idempotent (safe to re-run)
+ - Creates indexes
+ - Inserts representative sample documents
+ - Safe to re-run multiple times
 **********************************************************************/
 
 // use DB
@@ -18,7 +20,7 @@ function ensureCollection(name) {
 }
 
 // ============================= AP1 ==================================
-// AP1: Regional Fleet Dashboard View  (Week05 Q1)
+// AP1: Regional Fleet Dashboard View
 // Collection: fleet_status_by_region
 // Purpose: Fast dashboard of latest status/telemetry by region (newest first)
 ensureCollection("fleet_status_by_region");
@@ -88,7 +90,7 @@ Denormalization (where appropriate)
 
 
 // ============================= AP2 ==================================
-// AP2: Telemetry by Trip View  (Week05 Q2)
+// AP2: Telemetry by Trip View
 // Collection: telemetry_by_trip
 // Purpose: Ordered time-series readings per trip for analytics
 ensureCollection("telemetry_by_trip");
@@ -140,7 +142,7 @@ Denormalization (where appropriate)
 
 
 // ============================= AP3 ==================================
-// AP3: Vehicle Maintenance History View  (Week05 Q3)
+// AP3: Vehicle Maintenance History View
 // Collection: maintenance_history_by_vehicle
 // Purpose: Chronological list of service events for each truck
 ensureCollection("maintenance_history_by_vehicle");
@@ -212,7 +214,7 @@ Denormalization (where appropriate)
 
 
 // ============================= AP4 ==================================
-// AP4: Trips by Route and Day  (Week05 Q4)
+// AP4: Trips by Route and Day
 // Collection: trips_by_route_and_day
 // Purpose: Retrieve trips for a route on a day, ordered by start time
 ensureCollection("trips_by_route_and_day");
@@ -318,7 +320,7 @@ Denormalization (where appropriate)
 
 
 // ============================= AP5 ==================================
-// AP5: Vehicle Details Lookup (Master)  (Week05 Q5)
+// AP5: Vehicle Details Lookup (Master)
 // Collection: vehicle_details
 // Purpose: Authoritative single-vehicle master record (fast lookup)
 ensureCollection("vehicle_details");
@@ -394,5 +396,4 @@ Justification (embedding/referencing decision)
 Denormalization (where appropriate)
 - Include specs/registration so common UI views don’t require additional lookups.*/
 
-print("Part 2.2 EXEC: Collections, indexes, and sample docs are in place.");
-
+print("MongoDB schema setup completed: collections, indexes, and sample documents are ready.");
